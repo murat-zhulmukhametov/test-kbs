@@ -1,0 +1,100 @@
+﻿@page "/list"
+
+@using KBSTestTask.Shared
+@using Microsoft.AspNetCore.SignalR.Client
+
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime js
+
+<h3>Список городов</h3>
+
+<p>
+    <a href="/create">Добавить город</a>
+</p>
+
+@if (cities == null)
+{
+    <p>Загрузка...</p>
+}
+else
+{
+    <table class='table'>
+        <thead>
+            <tr>
+                <th>Название</th>
+                <th>Численность</th>
+                <th>Дата основания</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var city in cities)
+            {
+                <tr>
+                    <td><a href='/edit/@city.Id'>@city.Name</a></td>
+                    <td>@city.CitizensCount</td>
+                    <td>@city.FoundationDate</td>
+                    <td>
+                        <input type="button" value="Delete" @onclick="@(e => Delete(city.Id))" class="btn btn-primary" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+
+@code {
+    City[] cities;
+    private HubConnection hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/broadcastHub"))
+            .Build();
+
+        hubConnection.On("ReceiveMessage", () =>
+        {
+            CallLoadData();
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+
+        await LoadData();
+    }
+
+    private void CallLoadData()
+    {
+        Task.Run(async () =>
+        {
+            await LoadData();
+        });
+    }
+
+    protected async Task LoadData()
+    {
+        cities = await Http.GetFromJsonAsync<City[]>("api/city/list");
+        StateHasChanged();
+    }
+
+    Task SendMessage() => hubConnection.SendAsync("SendMessage");
+
+    protected async Task Delete(Guid id)
+    {
+        await Http.DeleteAsync($"api/city/delete/{id}");
+        await js.InvokeVoidAsync("alert", $"Удалено.");
+        if (IsConnected) await SendMessage();
+        await LoadData();
+    }
+
+    public bool IsConnected =>
+        hubConnection.State == HubConnectionState.Connected;
+
+    public void Dispose()
+    {
+        _ = hubConnection.DisposeAsync();
+    }
+}  

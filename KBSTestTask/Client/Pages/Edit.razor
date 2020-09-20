@@ -1,0 +1,78 @@
+﻿@page "/edit/{id}"
+
+@using Microsoft.AspNetCore.SignalR.Client
+@using KBSTestTask.Shared
+
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<h3>Изменить город</h3>
+
+<form>
+    <div class="row">
+        <div class="col-md-8">
+            <div class="form-group">
+                <label for="Name" class="control-label">Название</label>
+                <input for="Name" class="form-control" @bind="@city.Name" />
+            </div>
+            <div class="form-group">
+                <label for="CitizensCount" class="control-label">Численность</label>
+                <input for="CitizensCount" class="form-control" @bind="@city.CitizensCount" />
+            </div>
+            <div class="form-group">
+                <label for="FoundationDate" class="control-label">Дата основания</label>
+                <input for="FoundationDate" class="form-control" @bind="@city.FoundationDate" />
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-4">
+            <div class="form-group">
+                <input type="button" class="btn btn-primary" @onclick="@UpdateCity" value="Сохранить" />
+                <input type="button" class="btn" @onclick="@Cancel" value="Отмена" />
+            </div>
+        </div>
+    </div>
+</form>
+
+
+@code {
+    private HubConnection hubConnection;
+    [Parameter]
+    public string id { get; set; }
+
+    City city = new City();
+
+    protected override async Task OnInitializedAsync()
+    {
+        city = await Http.GetFromJsonAsync<City>("api/city/" + id);
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/broadcastHub"))
+            .Build();
+
+        await hubConnection.StartAsync();
+    }
+
+    protected async Task UpdateCity()
+    {
+        await Http.PostAsJsonAsync($"api/city/edit/{id}", city);
+        if (IsConnected) await SendMessage();
+        NavigationManager.NavigateTo("list");
+    }
+
+    Task SendMessage() => hubConnection.SendAsync("SendMessage");
+
+    public bool IsConnected =>
+        hubConnection.State == HubConnectionState.Connected;
+
+    public void Dispose()
+    {
+        _ = hubConnection.DisposeAsync();
+    }
+
+    void Cancel()
+    {
+        NavigationManager.NavigateTo("list");
+    }
+}
