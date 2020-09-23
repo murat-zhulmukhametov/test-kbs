@@ -3,8 +3,9 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using KBSTestTask.Shared
 
-@inject HttpClient Http
 @inject NavigationManager NavigationManager
+@inject HubConnection hubConnection
+@inject IJSRuntime js
 
 <h3>Изменить город</h3>
 
@@ -21,7 +22,7 @@
             </div>
             <div class="form-group">
                 <label for="FoundationDate" class="control-label">Дата основания</label>
-                <input for="FoundationDate" class="form-control" @bind="@city.FoundationDate" />
+                <input for="FoundationDate" class="form-control" @bind="@city.FoundationDate" @bind:format="dd/MM/yyyy" />
             </div>
         </div>
     </div>
@@ -37,7 +38,6 @@
 
 
 @code {
-    private HubConnection hubConnection;
     [Parameter]
     public string id { get; set; }
 
@@ -45,30 +45,28 @@
 
     protected override async Task OnInitializedAsync()
     {
-        city = await Http.GetFromJsonAsync<City>("api/city/" + id);
+        hubConnection.On("ItemHub", (City city) =>
+        {
+            this.city = city;
+            StateHasChanged();
+        });
 
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(NavigationManager.ToAbsoluteUri("/broadcastHub"))
-            .Build();
+        hubConnection.On("Error", (string message) =>
+        {
+            js.InvokeVoidAsync("alert", message);
+            StateHasChanged();
+        });
 
-        await hubConnection.StartAsync();
+        if (hubConnection.State != HubConnectionState.Connected)
+            await hubConnection.StartAsync();
+
+        await hubConnection.SendAsync("Item", Guid.Parse(id));
     }
 
     protected async Task UpdateCity()
     {
-        await Http.PostAsJsonAsync($"api/city/edit/{id}", city);
-        if (IsConnected) await SendMessage();
+        await hubConnection.SendAsync("Edit", Guid.Parse(id), city);
         NavigationManager.NavigateTo("list");
-    }
-
-    Task SendMessage() => hubConnection.SendAsync("SendMessage");
-
-    public bool IsConnected =>
-        hubConnection.State == HubConnectionState.Connected;
-
-    public void Dispose()
-    {
-        _ = hubConnection.DisposeAsync();
     }
 
     void Cancel()

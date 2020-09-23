@@ -2,10 +2,10 @@
 
 @using KBSTestTask.Shared
 @using Microsoft.AspNetCore.SignalR.Client
-
+ 
 @inject NavigationManager NavigationManager
-@inject HttpClient Http
 @inject IJSRuntime js
+@inject HubConnection hubConnection
 
 <h3>Список городов</h3>
 
@@ -33,9 +33,9 @@ else
                 <tr>
                     <td><a href='/edit/@city.Id'>@city.Name</a></td>
                     <td>@city.CitizensCount</td>
-                    <td>@city.FoundationDate</td>
+                    <td>@city.FoundationDate.ToString("dd/MM/yyyy")</td>
                     <td>
-                        <input type="button" value="Delete" @onclick="@(e => Delete(city.Id))" class="btn btn-primary" />
+                        <input type="button" value="Удалить"  @onclick="@(e => Delete(city.Id))" class="btn btn-primary" />
                     </td>
                 </tr>
             }
@@ -45,56 +45,68 @@ else
 
 
 @code {
-    City[] cities;
-    private HubConnection hubConnection;
+    IList<City> cities;
 
     protected override async Task OnInitializedAsync()
     {
-
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(NavigationManager.ToAbsoluteUri("/broadcastHub"))
-            .Build();
-
-        hubConnection.On("ReceiveMessage", () =>
+        hubConnection.On("ListHub", (List<City> list) =>
         {
-            CallLoadData();
+            cities = list;
             StateHasChanged();
         });
 
-        await hubConnection.StartAsync();
 
-        await LoadData();
-    }
-
-    private void CallLoadData()
-    {
-        Task.Run(async () =>
+        hubConnection.On("Created", (City city) =>
         {
-            await LoadData();
+            cities = cities.Append(city).ToList();
+            StateHasChanged();
         });
-    }
 
-    protected async Task LoadData()
-    {
-        cities = await Http.GetFromJsonAsync<City[]>("api/city/list");
-        StateHasChanged();
-    }
+        hubConnection.On("Updated", (City city) =>
+        {
+            var c = cities.FirstOrDefault(x => x.Id == city.Id);
 
-    Task SendMessage() => hubConnection.SendAsync("SendMessage");
+            if (c == null) return;
+
+            c.Name = city.Name;
+            c.CitizensCount = city.CitizensCount;
+            c.FoundationDate = city.FoundationDate;
+
+            StateHasChanged();
+        });
+
+        hubConnection.On("Deleted", (Guid id) =>
+        {
+            DeleteItem(id);
+            StateHasChanged();
+        });
+
+        hubConnection.On("Error", (string message) =>
+        {
+            js.InvokeVoidAsync("alert", message);
+            StateHasChanged();
+        });
+
+        if (hubConnection.State != HubConnectionState.Connected)
+        {
+            await hubConnection.StartAsync();
+        }
+
+        await hubConnection.SendAsync("List");
+    }
 
     protected async Task Delete(Guid id)
     {
-        await Http.DeleteAsync($"api/city/delete/{id}");
+        await hubConnection.SendAsync("Delete", id);
+        DeleteItem(id);
         await js.InvokeVoidAsync("alert", $"Удалено.");
-        if (IsConnected) await SendMessage();
-        await LoadData();
     }
 
-    public bool IsConnected =>
-        hubConnection.State == HubConnectionState.Connected;
-
-    public void Dispose()
+    private void DeleteItem(Guid id)
     {
-        _ = hubConnection.DisposeAsync();
+        var c = cities.FirstOrDefault(x => x.Id == id);
+        cities.Remove(c);
+        StateHasChanged();
     }
+
 }  

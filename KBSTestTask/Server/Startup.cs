@@ -1,13 +1,13 @@
+using KBSTestTask.Server.Data;
 using KBSTestTask.Server.Hubs;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Linq;
-using Microsoft.EntityFrameworkCore;
-using KBSTestTask.Server.Data;
 
 namespace KBSTestTask.Server
 {
@@ -22,7 +22,6 @@ namespace KBSTestTask.Server
 
         public void ConfigureServices(IServiceCollection services)
         {
-
             services.AddControllersWithViews();
             services.AddRazorPages();
             services.AddSignalR();
@@ -30,6 +29,7 @@ namespace KBSTestTask.Server
             {
                 options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[] { "application/octet-stream" });
             });
+
 
             services.AddDbContext<KBSTestContext>(context => { context.UseInMemoryDatabase("KBSDatabase"); });
         }
